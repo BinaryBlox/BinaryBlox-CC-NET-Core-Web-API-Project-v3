@@ -3,7 +3,6 @@ using System.Threading.Tasks;
 
 using BinaryBlox.SDK.Data.Enums.Repository; 
 using BinaryBlox.SDK.Data.Models.Permission;
-
  
 #pragma warning disable 1591
 namespace {{cookiecutter.project_api_pkg_account}}.Services

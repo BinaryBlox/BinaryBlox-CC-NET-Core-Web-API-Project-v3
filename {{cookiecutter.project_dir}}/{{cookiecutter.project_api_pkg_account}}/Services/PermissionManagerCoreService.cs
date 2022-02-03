@@ -1,22 +1,30 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
- 
-using BinaryBlox.SDK.Data.Service;
-using BinaryBlox.SDK.Data.Interfaces.Context;
-using BinaryBlox.SDK.Data.Models.Identity;
 
-using BinaryBlox.SDK.Identity.Interfaces;
+using AutoMapper;
+
 using BinaryBlox.SDK.Data.Configuration.Seed;
-
+using BinaryBlox.SDK.Data.Interfaces.Context;
+using BinaryBlox.SDK.Data.Interfaces.Entity;
+using BinaryBlox.SDK.Data.Models.Identity;
+using BinaryBlox.SDK.Data.Service;
+using BinaryBlox.SDK.Identity.Interfaces;
+using BinaryBlox.SDK.Web.Http.Enum;
+ 
 using {{cookiecutter.project_api_pkg_account}}.DAL; 
 
 #pragma warning disable 1591
 namespace {{cookiecutter.project_api_pkg_account}}.Services
 {
 
+    
     public partial class PermissionManagerCoreService : BxPermissionRepositoryContextService<BxAccountPermissionDbContext>
     {
 

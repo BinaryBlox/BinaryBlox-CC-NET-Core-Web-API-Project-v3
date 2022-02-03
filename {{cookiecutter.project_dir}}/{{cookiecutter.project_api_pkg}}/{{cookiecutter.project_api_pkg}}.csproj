@@ -94,14 +94,14 @@
   <!-- Utility -->
   <ItemGroup>
     <PackageReference Include="FluentValidation.AspNetCore" Version="10.3.6"/>  
-    <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="4.0.1"/>
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.0.1"/>  
+    <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="4.0.0"/>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.0.0"/>  
   </ItemGroup>
-  
+
   <!-- CLI Tools -->
   <ItemGroup>
     <!-- <DotNetCliToolReference Include="Swashbuckle.AspNetCore.Cli" Version="5.3.3" /> -->
-    <DotNetCliToolReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Tools" Version="2.0.4"/>
+    <DotNetCliToolReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Tools" Version="2.1.0-preview1-final"/>
   </ItemGroup>
 
   <!-- SDK Ref & Other configurations -->
