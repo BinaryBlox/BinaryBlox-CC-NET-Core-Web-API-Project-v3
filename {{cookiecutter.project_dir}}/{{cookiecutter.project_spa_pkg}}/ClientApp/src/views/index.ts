@@ -1,0 +1,1 @@
+export {default as NotFoundView} from "./errors/NotFound.view"

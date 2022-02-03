@@ -1,0 +1,299 @@
+{
+    "binaryblox": {
+        "name": "BinaryBlox Advanced OpenAPI Generator",
+        "description": "BinaryBlox Advanced OpenAPI Generator for Typescript",
+        "author": "Tony Henderson",
+        "version": "1.0.5",
+        "automation": {
+            "credentials": {
+                "git": {
+                    "user": "binaryblox",
+                    "token": "70a58f80e731886e17f034da47dc316377fb5874"
+                }
+            },
+            "data": {
+                "api": {
+                    "openApi": "3.0.1",
+                    "path": {
+                        "suffix": {
+                            "specification": "-api-specification"
+                        },
+                        "directory": {
+                            "specification": "generator/specification"
+                        }
+                    },
+                    "list": [
+                        {
+                            "active": true,
+                            "key": "{{cookiecutter.project_api_pkg}}",
+                            "title": "{{cookiecutter.project_api_name}}",
+                            "description": "{{cookiecutter.project_api_name}} Microservice.",
+                            "endpoint": "http://localhost:5003/swagger/v1/swagger.json",
+                            "version": "1.0.10",
+                            "releaseNote": "{{cookiecutter.project_api_name}} Microservice: 2020 Release notes",
+                            "package": false
+                        },
+                        {
+                            "active": true,
+                            "key": "{{cookiecutter.project_api_pkg_account}}",
+                            "title": "{{cookiecutter.project_api_name_account}}",
+                            "description": "{{cookiecutter.project_api_pkg_account}} Microservice.",
+                            "endpoint": "http://localhost:5004/swagger/v1/swagger.json",
+                            "version": "1.0.10",
+                            "releaseNote": "{{cookiecutter.project_api_pkg_account}} Microservice: 2020 Release notes",
+                            "package": false
+                        }
+                    ]
+                }
+            },
+            "config": {
+                "build": {
+                    "package": {
+                        "default": "com.binaryblox"
+                    },
+                    "version": {
+                        "semantic": {
+                            "bumpVersion": true,
+                            "bumpVersionStep": "patch"
+                        }
+                    },
+                    "path": {
+                        "directory": {
+                            "root": "generator"
+                        },
+                        "prefix": {
+                            "api": "api",
+                            "repository": "",
+                            "output": {
+                                "root": "API",
+                                "library": "Lib"
+                            }
+                        },
+                        "suffix": {
+                            "api": "api",
+                            "repository": ""
+                        }
+                    }
+                },
+                "deploy": {
+                    "active": true,
+                    "cleanTarget": true,
+                    "path": {
+                        "directory": {
+                            "root": "BinaryBloxAccountAPIKit/Sources",
+                            "prefix": {
+                                "api": "API"
+                            }
+                        }
+                    },
+                    "swift": {
+                        "version": "BinaryBloxAccountAPI"
+                    },
+                    "deploymentTarget": {
+                        "iOS": "13.0",
+                        "watchOS": "10.3"
+                    },
+                    "package": {
+                        "alamofire": "4.9.0"
+                    }
+                },
+                "dependency": {
+                    "useArchive": true,
+                    "path": {
+                        "directory": {
+                            "root": "automation/dependencies",
+                            "scripts": "scripts",
+                            "template": "templates"
+                        },
+                        "file": {
+                            "archive": "binaryblox-generator.zip"
+                        },
+                        "prefix": {
+                            "template": {
+                                "generator": "swaggen",
+                                "source": "binaryblox"
+                            }
+                        }
+                    }
+                }
+            },
+            "generator": {
+                "template": {
+                    "useArchive": false
+                },
+                "engine": {
+                    "list": [
+                        {
+                            "key": "openapi",
+                            "task": {
+                                "name": "Generate API Core Content (Models, API, Utils, etc.)",
+                                "sequence": 1
+                            },
+                            "config": {
+                                "language": "typescript-axios",
+                                "debug": {
+                                    "verbose": false
+                                },
+                                "template": {
+                                    "engine": ".mustache",
+                                    "path": {
+                                        "directory": {
+                                            "source": "generator/openApi/typescript-axios"
+                                        },
+                                        "file": {
+                                            "configuration": "some.config.file.yml"
+                                        },
+                                        "prefix": {
+                                            "library": "default"
+                                        }
+                                    }
+                                },
+                                "package": {
+                                    "invokerPackage": "invoker",
+                                    "apiPackage": "api",
+                                    "modelPackage": "model"
+                                },
+                                "properties": [
+                                    {
+                                        "key": "npmRepository",
+                                        "value": ""
+                                    },
+                                    {
+                                        "key": "withInterfaces",
+                                        "value": false
+                                    },
+                                    {
+                                        "key": "withSeparateModelsAndApi",
+                                        "value": "true"
+                                    },
+                                    {
+                                        "key": "withoutPrefixEnums",
+                                        "value": "false"
+                                    },
+                                    {
+                                        "key": "useSingleRequestParameter",
+                                        "value": false
+                                    },
+                                    {
+                                        "key": "dateLibrary",
+                                        "value": "java8"
+                                    },
+                                    {
+                                        "key": "modelDocs",
+                                        "value": "true"
+                                    },
+                                    {
+                                        "key": "InstanceNamePrefix",
+                                        "value": ""
+                                    },
+                                    {
+                                        "key": "projectName",
+                                        "value": "KP"
+                                    },
+                                    {
+                                        "key": "requestParamName",
+                                        "value": "requestObj"
+                                    },
+                                    {
+                                        "key": "responseAs",
+                                        "value": "Combine"
+                                    },
+                                    {
+                                        "key": "nonPublicApi",
+                                        "value": "false"
+                                    },
+                                    {
+                                        "key": "library",
+                                        "value": "urlsession"
+                                    },
+                                    {
+                                        "key": "sortModelPropertiesByRequiredFlag",
+                                        "value": "true"
+                                    },
+                                    {
+                                        "key": "sortParamsByRequiredFlag",
+                                        "value": "true"
+                                    },
+                                    {
+                                        "key": "swiftUseInstanceNamespace",
+                                        "value": "true"
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "key": "swaggen",
+                            "task": {
+                                "name": "Generate API Redux Content for given pattern.",
+                                "sequence": 2
+                            },
+                            "config": {
+                                "language": "swift5",
+                                "debug": {
+                                    "verbose": true,
+                                    "silent": false
+                                },
+                                "template": {
+                                    "engine": ".stencil",
+                                    "path": {
+                                        "directory": {
+                                            "source": "generator/swaggen/swift5"
+                                        },
+                                        "file": {
+                                            "configuration": "generator/swaggen/swift5/default/template.yml"
+                                        },
+                                        "prefix": {
+                                            "library": "default"
+                                        }
+                                    }
+                                },
+                                "properties": {
+                                    "dateLibrary": "java8"
+                                }
+                            }
+                        }
+                    ]
+                },
+                "patterns": {
+                    "redux": {
+                        "default": "Combine",
+                        "path": {
+                            "action": "Redux/Actions",
+                            "reducer": "Redux/Reducers",
+                            "middleware": "Redux/Middlewares",
+                            "store": "Redux/Store"
+                        },
+                        "options": [
+                            {
+                                "option": "Combine"
+                            },
+                            {
+                                "option": "ReSwift"
+                            },
+                            {
+                                "option": "RxSwift"
+                            },
+                            {
+                                "option": "PromiseKit"
+                            },
+                            {
+                                "option": "SwiftUIFlux"
+                            },
+                            {
+                                "option": "SwiftUI-Bindable-Redux"
+                            }
+                        ]
+                    }
+                }
+            },
+            "gradle": {
+                "includeWrapper": false,
+                "build": {
+                    "path": {
+                        "root": "build/binaryblox"
+                    }
+                }
+            }
+        }
+    }
+}

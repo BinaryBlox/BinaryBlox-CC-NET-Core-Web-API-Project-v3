@@ -1,0 +1,1261 @@
+
+buildscript {
+    repositories {
+        mavenCentral()
+        maven {
+            url "https://plugins.gradle.org/m2/"
+        }
+    }
+     dependencies {
+        classpath "org.openapitools:openapi-generator-cli:4.3.0"
+        classpath "org.openapitools:openapi-generator:4.3.0" 
+        classpath group: 'org.yaml', name: 'snakeyaml', version: '1.26'  
+        classpath group: 'org.json', name: 'json', version: '20180813'
+        classpath "com.moowork.gradle:gradle-node-plugin:1.2.0"  
+        // Updated version can be passed via command line arg as -PopenApiGeneratorVersion=VERSION
+        classpath "org.openapitools:openapi-generator-gradle-plugin:4.3.0"
+    }
+}
+
+// Plugins
+plugins {
+    id 'java'
+    id 'groovy'
+    id "de.undercouch.download" version "3.3.0"
+    id "com.moowork.node" version "1.2.0" 
+    id "org.openapi.generator" version "4.3.0"
+}
+ 
+apply plugin: 'java'
+apply plugin: 'groovy'
+apply plugin: 'com.moowork.node'
+apply plugin: 'org.openapi.generator'
+ 
+import org.gradle.api.tasks.Exec
+import org.gradle.api.tasks.StopActionException
+import org.apache.tools.ant.taskdefs.condition.Os
+import org.yaml.snakeyaml.DumperOptions
+import org.yaml.snakeyaml.Yaml
+import org.json.JSONException
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.Serializable  
+import java.text.DateFormat;  
+import java.text.SimpleDateFormat;  
+import java.util.Date;  
+import java.util.Calendar;  
+import org.openapitools.codegen.config.CodegenConfigurator
+import org.openapitools.codegen.DefaultGenerator
+import org.gradle.api.tasks.options.Option
+import org.gradle.internal.logging.text.StyledTextOutput
+import org.gradle.internal.logging.text.StyledTextOutputFactory
+import static org.gradle.internal.logging.text.StyledTextOutput.Style
+
+ext { 
+
+    // Console properties
+    command_npm = Os.isFamily(Os.FAMILY_WINDOWS) ? 'npm.cmd' : 'npm'
+    command_bower = Os.isFamily(Os.FAMILY_WINDOWS) ? 'bower.cmd' : 'bower'
+
+    // Package properties
+    jackson_version = '2.4.2'
+    json_api_version = '1.0'
+    jersey_version = '1.18'
+    jodatime_version = '2.3'
+    junit_version = '4.8.1'
+    openapitools_generator_version ='3.3.4'
+    openapitools_generator_cli_version ='3.3.4'
+     
+    // Generator properties
+    generator_eng_openapi = 'openapi'
+    generator_eng_swaggen = 'swaggen' 
+    path_type_api_specification = 'api_specification'
+    path_type_template = "template"  
+    path_type_eng_template = "eng_template" 
+    path_type_eng_template_lib_src = "eng_template_lib_source"
+    path_type_eng_template_config = "eng_template_cfg"
+    path_type_dependency = "dependency"
+    path_type_dependency_archive = "dependency_archive" 
+    path_type_build = "build"
+    path_type_gradle_build = "gradle"
+    path_type_generator = "generator"
+    path_type_api_generator_output = "api_generator_source"
+    path_type_api_generator_output_lib_source = "api_generator_lib_source"
+    path_type_api_generator_alternate_output_lib_source = "api_generator_alternate_lib_source"
+    path_type_api_generator_target_output = "api_generator_content_output"
+    
+    // Gradle Properties
+    log_comment_idx = 0
+    log_step_idx = 0
+}
+   
+// Default task(s) to be executed.
+defaultTasks  'generateApi'
+
+// Utility Version and Author
+version = '1.0.1' 
+group = 'binaryblox.codegen'
+
+ // Default configuration file
+def BINARYBLOX_API_GEN_CONFIG_FILENAME = './Automation/configuration/binaryblox-openapi-generator-typescript-axios.json'
+
+
+// Global vars  
+def projectConfig
+def projectConfigPath = "${BINARYBLOX_API_GEN_CONFIG_FILENAME}" 
+def commentCounter 
+ 
+//def projectConfigPath = "./binaryblox/config/${BINARYBLOX_API_GEN_CONFIG_FILENAME}" 
+def gradleWrapperVer = '5.2.1'
+ 
+// Override default build directory
+buildDir = getGradleBuildPath(projectConfigPath)
+ 
+//********************************************/
+// Gradle Tasks: Generator 
+//********************************************/
+// IMPORTANT NOTE: Important to set this task to doLast otherwise pre-execution logic for other tasks might fail.
+// Gradle Task: Default Gradle task for generating source code from Swagger Specification files.
+task generateApi(type: GeneratorArgs) {
+    doLast {
+    
+        createApi(disable, redux, projectConfig)
+         
+        // documentApi(document, projectConfig)  
+
+        // publishApi(publish, projectConfig)
+ 
+    } 
+}
+
+//********************************************/
+// Gradle Tasks: Startup 
+//********************************************/
+// Gradle Task: Initialize Configuration and bump version. Chained dependency from generateApi Task.
+task initSwagGenConfiguration {
+
+    // Clean build directory
+    delete(buildDir)
+
+    // Load Project Config
+    projectConfig = getProjectConfig(projectConfigPath)
+ 
+    // Update Api version & configuration
+    def bumpVersion = projectConfig.binaryblox.automation.config.build.version.semantic.bumpVersion
+    if(bumpVersion){
+        updateContentBuildVersion(projectConfig, projectConfigPath) 
+
+        // Re-load Project Config
+        projectConfig = getProjectConfig(projectConfigPath)
+    } 
+}
+
+// Gradle Task: Unzip project dependencies.
+task unzipDependencies(type: Copy) {
+   
+    try { 
+
+        projectConfig = getProjectConfig(projectConfigPath)
+
+        //wrapComment("line-dash", "INTIALIZE: PROCESS DEPENDENCY - Fetch and uncompress template archive.")
+        def useArchive = projectConfig.binaryblox.automation.config.dependency.useArchive 
+        def dependencyDirPath = getPathByType( projectConfig, null, path_type_dependency, null)  
+        def dependencyArchiveFilePath = getPathByType( projectConfig, null, path_type_dependency_archive, null)
+
+        if(!useArchive){ 
+            // Ingore zipfile
+             wrapComment("line", "Init: IGNORING Zipped archive....")  
+            return
+        }
+ 
+        wrapComment("line", "Init: Uncompressing Dependency Archive: [${dependencyArchive}]...") 
+
+        def archiveFile = file(archiveFilePath)
+        def contentOutputPath = file("${dependencyDirPath}")
+
+        from zipTree(archiveFile)
+        into contentOutputPath
+
+        // Later: Remove zip file.
+    } catch ( e) {
+        wrapComment("line-fatal","A fatal error occurred.\n${e.getStackTrace()}")
+    }  
+
+    //def zipDir = "${buildDir}/binaryblox-codegen"
+    //deleteDirectoryAndEmptyFolders("${buildDir}/__MACOSX") 
+}
+ 
+//********************************************/
+// Gradle Tasks: Extended Default Task(s)
+//********************************************/
+ 
+public class GeneratorArgs extends DefaultTask {
+
+    private String spec;
+    private String redux;
+    private boolean document;
+    private boolean publish;
+    private boolean disable;
+
+    @Option(option = "spec", description = "Swagger(swagger) or OpenAPI(openapi) (3.0+) specification format.")
+    public void setSpec(String spec) {
+        this.spec = spec;
+    }
+
+    @Input
+    public String getSpec() { 
+        if(!spec){
+            this.spec = 'openapi'
+        }
+        return spec;
+    }
+
+    @Option(option = "redux", description = "Redux pattern to generate(Combine, RxSwift, ReSwift, PromiseKit, SwiftUIFlux).")
+    public void setRedux(String redux) {
+        this.redux = redux;
+    }
+
+    @Input
+    public String getRedux() { 
+        if(!redux){
+            this.redux = 'Combine'
+        }
+        return redux;
+    }
+
+    @Option(option = "disable", description = "Disables API generator so other actions can be run independently.")
+    public void setDisable(boolean disable) {
+        this.disable = disable;
+    }
+
+    @Input
+    public boolean getDisable() {
+        return disable;
+    }
+
+    @Option(option = "document", description = "Runs the Jazzy library to output documentaiton for the libary.")
+    public void setDocument(boolean document) {
+        this.document = document;
+    }
+
+    @Input
+    public boolean getDocument() {
+        return document;
+    }
+
+    @Option(option = "publish", description = "Publishes the latest code to git repository.")
+    public void setPublish(boolean publish) {
+        this.publish = publish;
+    }
+
+    @Input
+    public boolean getPublish() {
+        return publish;
+    }
+
+    @TaskAction
+    public void verify() { 
+        // println("Specification Format: '${spec}'");
+        // println("Document API: '${document}'");
+        // println("Publish API: '${publish}'");
+        // // verify URL by making a HTTP call
+    }
+}
+  
+//********************************************/
+// Intialization logic
+//********************************************/
+ 
+def publishApi(active, projectConfig){
+    if(!active){ 
+        return
+    } 
+
+    wrapComment("line-dash", "PUBLISH API: IN PROGRESS")
+}
+
+def createApi(disabled, redux, projectConfig){
+
+    if(disabled){ 
+        return
+    }
+
+    wrapComment("line-dash", "CREATE API: IN PROGRESS")
+
+    // 1. Intialization Phase
+    initApiGenerators(projectConfig)
+
+    // 2. Specification Phase
+    fetchApiSpecData(projectConfig)
+
+    // 3. Code Generation Phase
+    generateApiFromSpecData(projectConfig, redux) 
+
+}
+
+// Method: Prelimnary builds steps, if any, will happen in this method.
+def initApiGenerators(projectConfig){ 
+
+    wrapComment("line-dash", "CONFIGURATION: Load project configuration")
+    wrapComment("line", "${projectConfig.binaryblox.name} Version: ${projectConfig.binaryblox.version}")
+ 
+}
+
+def getProjectConfig(projectConfigPath){
+    def jsonFile = file(projectConfigPath)
+    return new groovy.json.JsonSlurper().parseText(jsonFile.text)
+}
+
+def getGradleBuildPath(projectConfigPath){
+
+    def jsonFile = file(projectConfigPath)
+    def projectConfig = new groovy.json.JsonSlurper().parseText(jsonFile.text)
+    def gradleBuildPath = getPathByType(projectConfig, null, path_type_gradle_build, null)
+
+    return gradleBuildPath
+}
+
+//********************************************/
+// API Documentation
+//********************************************/
+def documentApi(active, projectConfig){
+    if(!active){
+        
+        return
+    }
+
+    wrapComment("line-dash", "DOCUMENT API: IN PROGRESS")
+
+    def args = "jazzy"// ${api.endpoint} --template ${templateConfigPath} --destination ${contentOutputPath.path} ${options}"
+ 
+    // Verbose output
+    // if(debugVerbose){
+    //     wrapComment("line", "Generator| Language [${language}] for API:  ${api.key}")
+    //     wrapComment("line", "Generator| Output Path: ${contentOutputPath.path}")
+    //     wrapComment("line", "Generator| Template Path: ${templateConfigPath}")
+    //     wrapComment("line", "Generator| Option flags: ${options}") 
+    //     wrapComment("line", "Generator| Command line statement: ${args}")
+    // }
+        
+    // Execute command statement
+    def commandProcess = "${args}".execute(); 
+    def outputStream = new StringBuffer(); 
+    commandProcess.waitForProcessOutput(outputStream, System.err);
+
+    wrapComment("line","API Documentation| Execution Output:\n${outputStream .toString()}");
+
+}
+
+
+//********************************************/
+// Swagger Specification file logic
+//********************************************/
+
+// Method: Creates a specification filename 
+def buildSpecificationFilename(api, projectConfig, extension) {
+ 
+    def filename = "${getPathByType(projectConfig, api, path_type_api_specification, null)}.${extension}"
+
+    wrapComment("line",  "Creating filename for: " + filename + "...")
+
+    return filename
+}
+
+
+// Method: Downloads specification files locally processing.
+def fetchApiSpecData(projectConfig){
+ 
+    def apiList = projectConfig.binaryblox.automation.data.api.list
+
+    wrapComment("line-dash", "INITIALIZE: PROCESS DEPENDENCY - Fetch API Specficiation Data")
+
+    wrapComment("line", "START: Downloading specification files...")
+
+    // Loop through specification data
+    for ( api in apiList ) {
+        if(api.active){
+
+            def filename = buildSpecificationFilename(api, projectConfig, "json")
+
+            wrapComment("line", "Specification file path: ${filename}")
+
+            download {
+                src api.endpoint
+                dest file( filename ) 
+            }
+
+            beautifyFileJson(filename)
+        }
+    } 
+
+    wrapComment("line", "COMPLETED: Downloading specification files...") 
+}
+
+//********************************************/
+// Unique Content path and file designation logic.
+//********************************************/
+
+// Method: Determines client root build path
+def appendClientBuildRootToPath(projectConfig, path){ 
+    def clientBuildRoot =   getPathByType(projectConfig, null, path_type_generator, null)
+    //"${project.buildDir}/${projectConfig.binaryblox.automation.config.build.path.directory.root}"
+
+    return "${clientBuildRoot}/${path}"
+}
+
+// Method: Determines the client API repository root path for the content generated from the specification file.
+def clientApiRepositoryPath(apiKey, projectConfig){
+    def automationBuildPath = projectConfig.binaryblox.automation.config.build.path
+    def clientBuildApiRoot = appendClientBuildRootToPath(projectConfig, automationBuildPath.prefix.api)     
+    def clientApiRepositoryPath =  "${clientBuildApiRoot}/${automationBuildPath.prefix.repository}${apiKey}${automationBuildPath.suffix.repository}"
+ 
+    wrapComment("line",  "PATH: clientApiRepositoryPath: ${clientApiRepositoryPath}")
+    
+    return clientApiRepositoryPath
+}
+
+// Method: Determines Default client API Library source path (API Specific code)
+def defaultClientApiLibrarySourcePath(projectConfig, api, isRelPath){
+   
+    def sourcePath = sharedClientApiLibrarySourcePath(api, projectConfig, isRelPath, "${getClientLibPrefix(api, projectConfig)}")
+    wrapComment("line", "PATH: DEFAULT Client API libary source path [${sourcePath}]")
+
+    return sourcePath
+}
+
+// Method: Determines Alternate client API Library source path (API Specific code)
+def alternateClientApiLibrarySourcePath(api, projectConfig, commonDir, isRelPath){ 
+
+    def sourcePath = sharedClientApiLibrarySourcePath(api, projectConfig, isRelPath, "${getClientLibPrefix(api, projectConfig)}/${commonDir}")
+    wrapComment("line", "PATH: ALTERNATE Client API libary source path [${sourcePath}]")
+
+    return sourcePath
+}
+ 
+// Method: Shared method for determining client API library source path
+def sharedClientApiLibrarySourcePath(api, projectConfig, isRelPath, definedPath){
+ 
+    def apiSourceRootPath = projectConfig.binaryblox.automation.config.build.path.prefix.output.root
+    def apiLibSourceRelPath = "${apiSourceRootPath}/${definedPath}"
+    def apiLibSourcePath = "${getPathByType(projectConfig, api, path_type_api_generator_output, null)}/${apiLibSourceRelPath}"
+
+    if(isRelPath){
+        apiLibSourcePath = apiLibSourceRelPath  
+    }
+    
+    wrapComment("line", "PATH: defaultClientApiLibrarySourcePath: ${apiLibSourcePath}")
+
+    return apiLibSourcePath
+}
+  
+// Method: Determines the generated content library prefix.
+def getClientLibPrefix(api, projectConfig){
+    def defaultPath = "${projectConfig.binaryblox.automation.config.build.path.prefix.output.library}" 
+    def libPrefix =  defaultPath // "${defaultPath}/${api.key}"
+
+    return libPrefix
+}
+ 
+//********************************************/
+// Code Generation
+//********************************************/
+  
+// Method: Generates content(source code) for each active specification provided in the configuration file.
+def generateApiFromSpecData(projectConfig, redux){
+    
+    wrapComment("line-dash", "EXECUTION: API GENERATION IN-PROGRESS - Begin API Content Generation Process") 
+    wrapComment("line", "START: Generating Client api... ") 
+
+    def apiConfigList = projectConfig.binaryblox.automation.data.api.list  
+    def openApiEngine = getContentEngine(projectConfig, generator_eng_openapi )
+    def swaggenEngine = getContentEngine(projectConfig, generator_eng_swaggen )
+
+    // Replace Template values
+    for ( api in apiConfigList ) {
+
+        if(api.active){ 
+
+            // Default OpenAPI Content...
+            generateDefaultApiContent(projectConfig, api, openApiEngine)    
+
+            // Redux OpenAPI Content...
+            //generateReduxContentFromTemplateEngine(projectConfig, api, redux, swaggenEngine)  
+
+            // Deployment
+            //deployApiContent(projectConfig, api)
+ 
+        }
+    } 
+
+    // Note required now
+    //copyGeneratedContentToDeploymentFolder(projectConfig)
+
+    wrapComment("line-success", "BUILD COMPLETED -> Client content automation complete.")
+}
+  
+def generateDefaultApiContent(projectConfig, api, engine){
+
+    // Execute code generator
+    generateDefaultContentFromTemplateEngine(projectConfig, api, engine)
+ 
+    // Include template directories and restructure folder according to configuration parameters.
+    //structureContent(projectConfig, apiConfig)  
+}
+
+def getContentEngine(projectConfig, key){
+
+    def generatorEngineList = projectConfig.binaryblox.automation.generator.engine.list 
+     
+    // Replace Template values
+    for ( generatorEngine in generatorEngineList ) { 
+        if(generatorEngine.key == key){  
+            wrapComment("line", "INFO: CONTENT ENGINE FOUND for key [${key}]")
+            return generatorEngine
+        } 
+    }
+    wrapComment("line-error", "CONTENT ENGINE NOT FOUND for key [${key}]")
+    return "" 
+}
+
+def generateDefaultContentFromTemplateEngine(projectConfig, api, engine){
+  
+    //try{ 
+        // Engine 
+        def engineConfig = engine.config
+        def engineProps = engineConfig.properties 
+ 
+        // Paths
+        def contentOutputPath = file(getPathByType(projectConfig, api, path_type_api_generator_output_lib_source, engine)).path
+        def templatePath = file(getPathByType(projectConfig, api, path_type_eng_template, engine)).path
+        
+        // Can use full path for this later; relatie path does not work on windows. 
+        wrapComment("line", "Generator| Name [${engineConfig.language}] for API: ${api.key}")
+        wrapComment("line", "Generator| API Endpoint: ${api.endpoint}")
+        wrapComment("line", "Generator| Output Path: ${contentOutputPath}")
+        wrapComment("line", "Generator| Template Path: ${templatePath}")
+        
+        // Documentation for Gradle plugin
+        // https://github.com/OpenAPITools/openapi-generator/blob/master/modules/openapi-generator-gradle-plugin/README.adoc
+        def config = new CodegenConfigurator() 
+         
+        config.verbose = engineConfig.debug.verbose 
+        config.generatorName = engineConfig.language
+        config.setInputSpec(api.endpoint as String)
+        config.setOutputDir(contentOutputPath as String)
+        config.setTemplateDir(templatePath as String)
+        config.invokerPackage = (getPackageNameWithValue(projectConfig, api, engineConfig.package.invokerPackage) as String)
+        config.apiPackage = (getPackageNameWithValue(projectConfig, api, engineConfig.package.apiPackage) as String)
+        config.modelPackage = (getPackageNameWithValue(projectConfig, api, engineConfig.package.modelPackage) as String)
+       
+        def additionalProperties = [:]; 
+        def propertyMapValues ="\n\n    Additional Properties:\n-------------------------------\n"
+
+        for ( prop in engineProps ) { 
+            //println( " key ${prop.key}: value ${prop.value}")
+            propertyMapValues+="    KEY [${prop.key}]: VALUE: ${prop.value}\n"
+            additionalProperties[prop.key] = prop.value
+        }
+
+        wrapComment("line", "Generator| Map Properties: ${propertyMapValues}")
+
+        // Dynamically add properties
+        config.setAdditionalProperties(additionalProperties)
+
+        //  config.setAdditionalProperties([ 
+        //     'dateLibrary'   : engineProps.dateLibrary, 
+        //     'modelDocs' : engineProps.modelDocs,
+        //     'apiNamePrefix' : engineProps.apiNamePrefix,
+        //     'projectName' :  engineProps.projectName,
+        //     'swiftUseApiNamespace' : engineProps.swiftUseApiNamespace,
+        //     'responseAs' : engineProps.responseAs,
+        //     'nonPublicApi' : engineProps.nonPublicApi, 
+        //     'library' : engineProps.library, //"alamofire"
+        //     'sortModelPropertiesByRequiredFlag' : engineProps.sortModelPropertiesByRequiredFlag,
+        //     'sortParamsByRequiredFlag' : engineProps.sortParamsByRequiredFlag 
+        // ])
+
+        // Additional Settings(Future)
+        // config.setImportMappings([
+        //         'Dog': 'io.swagger.petstore.client.model.Dog'
+        // ])
+        // systemProperties = [
+        //         modelDocs: "false" 
+        // ]
+        // additionalProperties = [
+        //         useCombine: "true",
+        //         useAlamofire: "true",
+        //         useURLSession: "false"
+    
+        new DefaultGenerator().opts(config.toClientOptInput()).generate() 
+
+    // } catch ( e) {
+    //     wrapComment("line-failure", "generateDefaultContentFromTemplateEngine() stacktrace: \n\n${e.getStackTrace()}")
+        
+    //     throw new StopActionException()
+    // }  
+}
+
+def getPackageNameWithValue(projectConfig, api, value){
+    def defaultPackage = projectConfig.binaryblox.automation.config.build.package.default
+    return "${defaultPackage}.${api.key}.${value}"
+}
+
+// Method: Generate code use SwagGen (Default option for swift)
+def generateReduxContentFromTemplateEngine(projectConfig, api, redux, engine){
+   
+    //try{ 
+        wrapComment("line-dash", "EXECUTION: API GENERATION IN-PROGRESS - Execute SwagGen command to generate API.")
+
+        def engineConfig = engine.config
+        def engineProps = engineConfig.properties    
+        // NOTE: Can use full path for this later; relatie path does not work on windows. 
+
+        // Paths
+        def contentOutputPath = file(getPathByType(projectConfig, api, path_type_api_generator_output_lib_source, engine)).path
+        def templateRoot = getPathByType(projectConfig, api, path_type_eng_template, engine) 
+        def templateConfigPath = getPathByType(projectConfig, api, path_type_eng_template_config, engine)
+    
+        //---------------------------------------
+        // FLAGS
+        // NOTE: Other flags can be added from template.yml
+        //---------------------------------------
+
+        // Options Flags 
+        // NOTE: NO SPACES for options or it will break(even in values with brackets)   
+        def optionFlags = "-o name:${api.title}"
+        optionFlags+= ""
+
+        def command = "swaggen generate ${api.endpoint}"
+        command+= " -t ${templateConfigPath}"
+        command+= " -d ${contentOutputPath}" 
+        command+= (engineConfig.debug.verbose) ? " -v" : "" // Verbose
+        command+= (engineConfig.debug.silent) ? " -s" : "" // Silent 
+        command+= " ${optionFlags}"
+
+        // Verbose output
+        //if(engineConfig.debug.verbose){
+            wrapComment("line", "Generator| Name [${engineConfig.language}] for API: ${api.key}")
+            wrapComment("line", "Generator| Output Path: ${contentOutputPath}")
+            wrapComment("line", "Generator| Template Path: ${templateConfigPath}")
+            wrapComment("line", "Generator| Option flags: ${optionFlags}")  
+            wrapComment("line", "Generator| Command line statement: ${command}")
+        //}
+            
+        // Execute command statement
+        def commandProcess = "${command}".execute(); 
+        def outputStream = new StringBuffer(); 
+        commandProcess.waitForProcessOutput(outputStream, System.err);
+
+        wrapComment("line","Generator| Execution Output:\n${outputStream.toString()}");
+    // } catch ( e) {
+    //     wrapComment("line-failure", "generateReduxContentFromTemplateEngine() stacktrace: \n\n${e.getStackTrace()}") 
+    //     throw new StopActionException()
+    // }  
+} 
+
+def getPathByType( projectConfig, api, type, engine){ 
+    def path = "NOT FOUND" 
+    def message = "PATH BY TYPE: Type|${type}, Path|"
+ 
+    switch(type){  
+        default:
+            path = sharedGetPath(projectConfig, api, type, null, message, engine)
+    }
+    return path
+}
+
+def getPathByTypeAndValue( projectConfig, api, type, value, engine){ 
+
+    def path = "NOT FOUND" 
+    def message = "PATH BY TYPE AND VALUE: Type|${type}, Path|"
+ 
+    switch(type){ 
+        case path_type_api_generator_alternate_output_lib_source: 
+            path = "${alternateClientApiLibrarySourcePath(api, projectConfig, value, false)}"
+            break 
+        default:
+            path = sharedGetPath(projectConfig, api, type, value, message, engine)
+    }
+    
+    wrapComment("line", "${message}${path}...")
+    return path
+}
+
+def sharedGetPath(projectConfig, api, type, value, message, engine){
+
+    def engineProps = ""
+    def engineTemplatePath = ""
+    def engineTemplateSourcePath = ""
+    def path = "NOT FOUND" 
+
+    if(engine){ 
+        engineProps = engine.config.properties 
+        engineTemplatePath = engine.config.template.path
+        engineTemplateSourcePath = engineTemplatePath.directory.source 
+    }
+     
+    def automation = projectConfig.binaryblox.automation
+    def useArchive = automation.config.dependency.useArchive 
+ 
+    def buildRoot = project.buildDir
+    def projectRoot = project.projectDir
+    def apiPath = automation.data.api.path 
+    def dependencyPath = automation.config.dependency.path  
+    def defaultRoot = (useArchive) ? buildRoot : projectRoot
+    def dependencyRootPath = "${defaultRoot}/${dependencyPath.directory.root}"
+    def templatePath = "${dependencyRootPath}/${dependencyPath.directory.template}" 
+    def deployPath = automation.config.deploy.path
+     
+    switch(type){  
+        case path_type_api_specification:
+            path = "${buildRoot}/${apiPath.directory.specification}/${api.key.toLowerCase()}${apiPath.suffix.specification}"
+            break
+        case path_type_template:
+            path = "${dependencyRootPath}/${dependencyPath.directory.template}" 
+            break
+        case path_type_eng_template:  
+            path = "${templatePath}/${engineTemplateSourcePath}"
+            break
+        case path_type_eng_template_lib_src:  
+            path = "${templatePath}/${engineTemplateSourcePath}/${dependencyPath.prefix.template.source}"
+            break
+        case path_type_eng_template_config:
+            path = "${templatePath}/${engineTemplatePath.file.configuration}"
+            break 
+        case path_type_dependency:
+            path = "${dependencyRootPath}"
+            break
+        case path_type_dependency_archive:
+            path = "${dependencyRootPath}/${dependencyPath.file.archive}"
+            break
+        case path_type_build:
+            path = "${buildRoot}"
+            break
+        case path_type_gradle_build:
+            path = "${automation.gradle.build.path.root}"
+            break
+        case path_type_generator:
+            path = "${buildRoot}/${automation.config.build.path.directory.root}"
+            break 
+        case path_type_api_generator_output:
+            path = "${clientApiRepositoryPath(api.key, projectConfig)}"
+            break
+        case path_type_api_generator_output_lib_source:
+            path = "${defaultClientApiLibrarySourcePath(projectConfig, api, false)}"
+            break
+        case path_type_api_generator_target_output:
+            path = "${projectRoot}/${deployPath.directory.root}/${deployPath.prefix.api}"
+            break
+        default: 
+            message = "PATH NOT FOUND FOR TYPE: Type|${type}" 
+            break    
+    } 
+
+    wrapComment("line", "${message}${path}...")
+
+    return path
+} 
+
+def hasStringValue(value){ 
+    if(value && value.length() > 0){
+        return true
+    }
+    return false
+}
+ 
+// Gradle Task: Executes command line with specified arguments
+// NOTE: Needed to change >> operators to doLast do to lastest Gradle version 
+task npmBin { 
+    doLast {
+        new ByteArrayOutputStream().withStream { os ->
+            exec {
+                executable = command_npm
+                args = ['bin']
+                standardOutput = os
+            }
+            ext.binPath = os.toString().trim() + File.separator
+        }
+    }
+}
+
+//********************************************/
+// Post processing generated content
+//********************************************/
+ 
+// Method: SwagGen - Copy Project Template files into generated content folder.
+def structureContent(projectConfig, api){
+
+    wrapComment("line-dash", "POST-EXECUTION: STRUCTURE GENERATED API CONTENT - Structure generated API content as specified in project configuration.")
+
+    //-----------------------------------------
+    // Example structure example  
+    //-----------------------------------------
+    // ProjectFolder/Source/Library/Api/Service/Requests
+    // ProjectFolder/Source/Library/Api/Models
+    // ProjectFolder/Source/Library/Api/Core
+    def apiKey = pascalCase(api.key) // Pascal case  
+    def automationCfg = projectConfig.binaryblox.automation.config
+    def swaggenEngine = getContentEngine(projectConfig, generator_eng_swaggen ) 
+    def swaggenTemplateLibSrc =  getPathByType(projectConfig, api, path_type_eng_template_lib_src, swaggenEngine) 
+    //"${project.buildDir}/${depRoot}/${automationCfg.dependency.path.directory.template.root}" 
+   
+    // Default Source Generation paths
+    def defaultApiRepoPath = getPathByType(projectConfig, api, path_type_api_generator_output, swaggenEngine)  
+    def defaultApiLibSrcPath =  getPathByType(projectConfig, api, path_type_api_generator_output_lib_source, swaggenEngine)  
+
+    // Temporary Source paths (just for staging & manipulating files)
+    def tempApiLibSrcPath = "${defaultApiRepoPath}/Sources"
+    def tempApiModelSrcPath = "${tempApiLibSrcPath}/Models"
+    def tempApiRequestSrcPath = "${tempApiLibSrcPath}/Requests"
+
+    // Target (Destination) Source Generation paths
+    def targetApiCoreSrcPath = getPathByTypeAndValue(projectConfig, api, path_type_api_generator_alternate_output_lib_source, "Core", swaggenEngine)  
+    def targetApiModelSrcPath = getPathByTypeAndValue(projectConfig, api, path_type_api_generator_alternate_output_lib_source, "Models", swaggenEngine)  
+    def targetApiRequestSrcPath = getPathByTypeAndValue(projectConfig, api, path_type_api_generator_alternate_output_lib_source, "Service/Requests", swaggenEngine)  
+  
+    wrapComment("line", "defaultApiLibSrcPath: ${defaultApiLibSrcPath}")
+    wrapComment("line", "defaultApiRepoPath: ${defaultApiRepoPath}")
+ 
+    // Move Default directory up one folder 
+    moveDirectory( defaultApiLibSrcPath, defaultApiRepoPath, null ) 
+ 
+    // Copy template/ add-on files & assets to generated code
+    copyFilestoDirectory( templateLibSrc, targetApiCoreSrcPath, null, null ) 
+
+    // Copy Model, Requests directories to other location
+    moveDirectory( tempApiModelSrcPath, targetApiModelSrcPath, null )
+    moveDirectory( tempApiRequestSrcPath, targetApiRequestSrcPath, null )
+
+    // Copy root contents (minus directories already moved, to other location
+    moveDirectory( tempApiLibSrcPath, targetApiCoreSrcPath, null )  
+}
+ 
+// Method: Copy Gradle Wrapper files if required.
+def copyGradleWrapperFiles(projectConfig, api){
+    // Include Gradle Wrapper
+    def includeWrapper = projectConfig.binaryblox.gradle.includeWrapper 
+    if(includeWrapper){
+        copyFilestoDirectory( tmplDir.gradle, getPathByType(projectConfig, api, path_type_api_generator_output, null), null, null )
+    }
+}
+   
+// Method: Copies generated content, for each specification, to a new deployment folder.
+// NEEDS TO BE UPDATED: NOT IN USE
+def deployApiContent(projectConfig, api){
+ 
+    def deployConfig = projectConfig.binaryblox.automation.config.deploy
+    def sourceDir = getPathByType(projectConfig, api, path_type_api_generator_output)
+    def apiLibSourceDir = getPathByType(projectConfig, api, path_type_api_generator_output_lib_source)
+    def apiTargetDir = getPathByType(projectConfig, api, path_type_api_generator_target_output)
+
+    wrapComment("line-dash", "POST-EXECUTION: DEPLOY GENERATED API CONTENT - Copy generated content to target directory in framework project.")
+
+    // If true, end generation process here.
+    if(!deployConfig.active){
+        wrapComment("line", "GENERATION COMPLETE: Deployment to destination is disabled...")
+        return
+    }
+    // If true, delete target contents before copying files
+    if(deployConfig.cleanTarget){
+        wrapComment("line", "DELETING: Deleting deployment target directory...")
+        delete "${apiTargetDir}" 
+    }
+
+    // Keep .plist from CookieCutter project
+    wrapComment("line", "BEGIN DEPLOYMENT: Copying files to deployment directory...")
+
+    // Copy API library source
+    copyFilestoDirectory( apiLibSourceDir, apiTargetDir, null, null )
+
+    // Copy API Readme only
+    copyFilestoDirectory( sourceDir, project.projectDir, null, "*.md"  )
+
+    // Copy API Podspec only
+    copyFilestoDirectory( sourceDir, project.projectDir, null, "*.podspec"  )
+
+    // Regenerate XCode Project file to include updated source.
+    updateProjectSource(projectConfig, api)
+  
+    wrapComment("line", "END DEPLOYMENT: Files copied over to deployment directory successfully.")
+}
+
+def updateProjectSource(projectConfig, api){
+
+     wrapComment("line-dash", "POST-EXECUTION: DEPLOY GENERATED API CONTENT - Update XCodeProject to include generated content.")
+
+    // Re-run XCodeGen to update project with generated source.
+    def args = "xcodegen" 
+  
+    // Execute command statement
+    def commandProcess = "${args}".execute(); 
+    def outputStream = new StringBuffer(); 
+    commandProcess.waitForProcessOutput(outputStream, System.err);
+
+    wrapComment("line","Run XCodeGen to Update Project Source| Execution Output:\n${outputStream .toString()}");
+}
+ 
+//********************************************/
+// File & Folder Manipulation
+//********************************************/
+  
+def addContentToFile(apiKey, projectConfig, sourcePath, value){
+ 
+    def relPath = "${getPathByType(projectConfig, api, path_type_api_generator_output, null)}/${sourcePath}" 
+    def exportFile = new File(relPath) 
+    def fileText = exportFile.text 
+
+    fileText = fileText + "\n" + value
+
+    exportFile.text = fileText 
+}
+
+def replaceLineInFile(projectConfig, sourcePath, valueMap, isAllValues){
+ 
+    def alterFile = new File(sourcePath) 
+
+    def lines = alterFile.readLines();
+    lines.each { String line ->
+        wrapComment("line",  "REPLACED VALUE: ${line}")
+    } 
+}
+
+// Method: Search and replaces values, via map, in a file
+def replaceValuesInFile(apiKey, projectConfig, sourcePath, valueMap, moveToPath, isAllValues){
+ 
+    def rootPath =  getPathByType(projectConfig, api, path_type_api_generator_output, null)
+    def relPath = "${rootPath}/${sourcePath}" 
+    def exportFile = new File(relPath) 
+     wrapComment("line",  "METHOD: replaceValuesInFile ${relPath}")
+    def fileText = exportFile.text 
+   
+    wrapComment("line",  "FILE TEXT: ${fileText}")
+
+    if(valueMap){
+        valueMap.each{ mapKey, mapValue ->  
+            //println "${mapKey} : ${mapValue}"  
+            if(isAllValues){
+                fileText = fileText.replaceAll(mapKey, mapValue)
+            }
+            else{
+                fileText = fileText.replace(mapKey, mapValue)
+            }
+        }  
+    }
+    
+    //println "FILE TEXT REPLACED: ${fileText}" 
+    exportFile.text = fileText 
+
+    if(moveToPath){ 
+        exportFile.renameTo( new File("${rootPath}/${moveToPath}") ) 
+    } 
+}
+
+// Method: Deletes a directory and included files.
+def deleteDirectory(source){
+    wrapComment("line", "DELETE FOLDER: From source directory [ ${source}]")
+    String sourceDir = source
+    ant.delete(dir: sourceDir)
+}
+
+// Method: Creates a directory based on given destination
+def createDirectory(destination){
+    wrapComment("line", "CREATE FOLDER: From destination directory [ ${destination}]")
+    String destinationDir = destination
+    ant.mkdir(dir: destinationDir)
+}
+  
+// Method: Moves a directory and corresponding contents to a new destination. Allows for the exlusion of files via wildcard value.
+def moveDirectory(  source, destination, excludeValue){
+  
+    wrapComment("line", "MOVE FILES: From source directory [ ${source}]")
+ 
+    // Create new directory
+    createDirectory(destination) 
+    
+    // Copy files to directory
+    copyFilestoDirectory( source, destination, excludeValue, null)
+
+    // Delete old directory
+    deleteDirectory(source)
+ 
+    wrapComment("line", "MOVE FILES: To destination directory [ ${destination}]")
+}
+
+// Method: Copies friles to a new destination. Allows for the exlusion of files via wildcard value.
+def copyFilestoDirectory(  source, destination, excludeValue, includeValue){
+  
+    wrapComment("line", "COPY FILES: From source directory [ ${source}]")
+    wrapComment("line", "COPY FILES: To destination directory [ ${destination}]")
+    String sourceDir = source
+    String destinationDir = destination
+
+    if(!excludeValue){
+        excludeValue = "*.java"
+    } 
+
+    if(!includeValue){
+        includeValue = "**/*"
+    } 
+
+    ant.copy(todir: destinationDir) {
+        fileset(dir : sourceDir) {
+            exclude(name: excludeValue)
+            include(name: includeValue)
+        }
+    } 
+}
+ 
+// Method: Cleans build directory before adding new content.
+def cleanEntireBuildDir(){
+    wrapComment("line",  "CLEANING....${project.buildDir}")
+    def dir = new File(project.buildDir)
+    if (dir.isDirectory()) {
+        ant.delete(includeemptydirs: true) {
+            fileset(dir: dir, includes: '**/*', excludes: '')
+        }
+    }
+}
+
+// Gradle Task: Clean build directory
+task cleanBuildDir(description: 'Cleans up Build Directory') { 
+    doLast {
+        cleanEntireBuildDir()
+    }
+}
+
+// Gradle Task: Build project manifest
+task buildProjectManifest(type: Copy) {
+    from 'automation/templates/project'
+    into 'automation/templates/project'
+    include 'projectinfo.html.template'
+    rename { file -> 'index.html' }
+    expand(project: project, title: 'Swagger Project Detail', generated: new Date())
+}
+
+task buildAndCommit(type: Exec) { 
+    //workingDir "$projectDir"
+    wrapComment("line", "Getting ready to commit ${project.projectDir}")
+    workingDir "${project.projectDir}"
+    commandLine 'sh', './git_push.sh'
+    //Usage example: /bin/sh ./git_push.sh wing328 openapi-pestore-perl "minor update"
+    //commandLine 'sh', './git_push.sh #git_user# #git_repo_name# #git_release_notes#'
+}
+ 
+//********************************************/
+// Uncategorized Helper Utils
+//********************************************/
+
+// Method: Apply Pascal case to a string
+def pascalCase(str)
+{
+    if(str == null) return str;
+    return str.substring(0, 1).toUpperCase() + str.substring(1);
+}
+
+// Method: Updates API version patch, minor or major specified in configuration.
+def updateContentBuildVersion(projectConfig, projectConfigPath){
+
+    def apiList = projectConfig.binaryblox.automation.data.api.list
+    def bumpVersion = projectConfig.binaryblox.automation.config.build.version.semantic.bumpVersion
+    def bumpVersionStep = projectConfig.binaryblox.automation.config.build.version.semantic.bumpVersionStep
+
+    def jsonFile = file(projectConfigPath) 
+    def slurped = new groovy.json.JsonSlurper().parseText(jsonFile.text)
+    def builder = new groovy.json.JsonBuilder(slurped)
+    wrapComment("line-dash", "INIT: Toolchain intialization")
+    wrapComment("line", "Updating api versions for ${bumpVersionStep.toUpperCase()}...")
+    def counter = 0
+
+    for ( api in apiList ) {
+        if(api.active){ 
+ 
+            def versionParts = api.version.split('\\.')
+            def updatedVersion = "" 
+            def major = versionParts[0]
+            def minor = versionParts[1]
+            def patch = versionParts[2]
+
+            def updateValue = 0
+            switch(bumpVersionStep){
+
+                case "major":
+                    updateValue = major as int
+                    updateValue++
+                    updatedVersion =  "${updateValue}.${minor}.${patch}"
+                    break
+
+                case "minor":
+                    updateValue = minor as int
+                    updateValue++
+                    updatedVersion =  "${major}.${updateValue}.${patch}"
+                    break
+
+                case "patch":
+                    updateValue = patch as int
+                    updateValue++
+                    updatedVersion =  "${major}.${minor}.${updateValue}"
+                    break
+            } 
+            builder.content.binaryblox.automation.data.api.list[ counter ].version = updatedVersion
+            wrapComment("line", "Bumping ${bumpVersionStep} version from ${api.version} to ${updatedVersion} for api: ${api.key}" )
+        }
+
+        counter++
+    } 
+
+    // Write updated configuration
+    jsonFile.withWriter( 'UTF-8' ) { it << builder.toPrettyString() }
+    
+    wrapComment("line", "Updating api version for ${bumpVersionStep.toUpperCase()}...")
+}
+
+// Method: Converts YAML(.yml) file to JSON and beautifies the format.
+def convertYamlToJson(Object obj) throws JSONException {
+    if (obj instanceof Map) {
+
+      def map = (Map<Object, Object>) obj; 
+      def result = new JSONObject();
+
+      for (Map.Entry<Object, Object> stringObjectEntry : map.entrySet()) {
+        String key = stringObjectEntry.getKey().toString();
+
+        result.put(key, convertYamlToJson(stringObjectEntry.getValue()));
+      }
+
+      return result;
+    } else if (obj instanceof ArrayList) {
+        def arrayList = (ArrayList) obj;
+        def result = new JSONArray();
+
+        for (Object arrayObject : arrayList) {
+            result.put(convertYamlToJson(arrayObject));
+        }
+
+        return result;
+    } else if (obj instanceof String) {
+        return obj;
+    } else if (obj instanceof Boolean) {
+        return obj;
+    } else {
+        wrapComment("line", "ERROR: Unsupported class [${obj.getClass().getName()}]") 
+        return obj;
+    }
+} 
+
+
+// Method: Structures .JSON content from single line.
+def beautifyFileJson(filePath){
+    def jsonFile = file(filePath) 
+    def slurped = new groovy.json.JsonSlurper().parseText(jsonFile.text)
+    def builder = new groovy.json.JsonBuilder(slurped)
+
+    // Beautify JSON
+    jsonFile.withWriter( 'UTF-8' ) { it << builder.toPrettyString() }
+}
+
+def getDateTime(){
+    def date = Calendar.getInstance().getTime();  
+    //def dateFormat = new SimpleDateFormat("yyyy-mm-dd hh:mm:ss");  
+    def dateFormat = new SimpleDateFormat("hh:mm:ss");  
+    def strDate = dateFormat.format(date);   
+    return strDate
+}
+
+// Method: Wraps a comment with text
+def wrapComment(type, comment ){ 
+    def out = services.get(StyledTextOutputFactory).create("default")
+    
+    // Style Output Sample
+    //  StyledTextOutput.Style.values().each {
+    //     out.style(it).println("This line has the style $it")
+    // }
+
+    // Style: UserInput
+    // Style: Identifier
+    // Style: Description
+    // Style: ProgressStatus
+    // Style: Success
+    // Style: SuccessHeader
+    // Style: Failure
+    // Style: FailureHeader
+    // Style: Info
+    // Style: Error
+
+   
+
+    switch (type){
+         
+         case  "line": 
+            log_comment_idx = log_comment_idx+1
+            out.style(Style.Info).text("\n[ ${log_step_idx}.${log_comment_idx} - ${getDateTime()} Debug] \n").style(Style.Error).println("${comment}")
+            break
+         case  "line-dash": 
+            log_step_idx = log_step_idx+1
+            //out.style(Style.UserInput).println( "\n-----------------------------------------------------------------")
+            out.style(Style.Info).text("\n[ ${log_step_idx}.0 - ${getDateTime()} Debug] \n").style(Style.SuccessHeader).text(">> [TASK ${log_step_idx}.0 ] ").style(Style.SuccessHeader).println("-> ${comment}") 
+            //out.style(Style.UserInput).println( "-----------------------------------------------------------------\n")
+            break
+        case  "line-error": 
+            log_step_idx = log_step_idx+1
+            //out.style(Style.Failure).println( "\n************************************************************")
+            out.style(Style.UserInput).text("\n\n[${getDateTime()} Error] \n").style(Style.FailureHeader).text(">> ERROR: ").style(Style.Failure).println("-> ${comment}") 
+            //out.style(Style.Failure).println("************************************************************\n")
+            break
+        case  "line-failure": 
+            log_step_idx = log_step_idx+1
+            //out.style(Style.Failure).println( "\n************************************************************")
+            out.style(Style.UserInput).text("\n\n[${getDateTime()} Fatal] \n ").style(Style.FailureHeader).text(">> FAILURE: ").style(Style.Failure).println("-> ${comment}") 
+            //out.style(Style.Failure).println("************************************************************\n")
+            break
+ 
+        case "line-success":
+            log_step_idx = log_step_idx+1
+            out.style(Style.SuccessHeader).println( "\n///////////////////////////////////////////////////////////////->")
+            out.style(Style.SuccessHeader).text("\n[${getDateTime()}] ").style(Style.SuccessHeader).text(">> SUCCESS: ").style(Style.FailureHeader).text("🍺 <BEER TIME> 🍺").style(Style.SuccessHeader).println("-> ${comment}") 
+            out.style(Style.SuccessHeader).println("\n///////////////////////////////////////////////////////////////->\n")
+            break
+    } 
+}
+
+//********************************************/
+// Gradle dependencies & configuration
+//********************************************/
+
+// Task will update/add gradle wrapper of specified version.
+// wrapper {
+//     gradleVersion = "${gradleWrapperVer}"
+// }
+  
+sourceCompatibility = JavaVersion.VERSION_1_8
+targetCompatibility = JavaVersion.VERSION_1_8
+ 
+//********************************************/
+// Task Dependencies
+//********************************************/
+initSwagGenConfiguration.dependsOn(unzipDependencies) 
+generateApi.dependsOn(initSwagGenConfiguration)
+ 
+dependencies {
+
+    compile gradleApi()
+    compile localGroovy()
+ 
+    compile "javax.json:javax.json-api:$json_api_version" 
+    compile "com.sun.jersey:jersey-client:$jersey_version"
+    compile "com.sun.jersey.contribs:jersey-multipart:$jersey_version"
+    compile "com.fasterxml.jackson.core:jackson-core:$jackson_version"
+    compile "com.fasterxml.jackson.core:jackson-annotations:$jackson_version"
+    compile "com.fasterxml.jackson.core:jackson-databind:$jackson_version"
+    compile "com.fasterxml.jackson.datatype:jackson-datatype-joda:2.1.5" 
+    compile "joda-time:joda-time:$jodatime_version" 
+
+    // OpenAPI
+    compile "org.openapitools:openapi-generator-cli:$openapitools_generator_cli_version"
+    compile "org.openapitools:openapi-generator:$openapitools_generator_version"
+
+    testCompile "junit:junit:$junit_version"
+
+    runtime 'com.squareup.okhttp:okhttp:2.7.5'
+    runtime 'com.squareup.okhttp:logging-interceptor:2.7.5'
+    runtime 'com.google.code.gson:gson:2.8.1'
+}
