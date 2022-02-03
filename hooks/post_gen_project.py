@@ -33,8 +33,8 @@ try:
     # -*- print ("Project BinaryBlox.SDK added to solution...") 
 
      # -*- Adding {{cookiecutter.project_identity_pkg}} Project -*-
-    os.system('dotnet sln {{cookiecutter.project_dir}}.sln add {{cookiecutter.project_identity_pkg}}/{{cookiecutter.project_identity_pkg}}.csproj')
-    print ("Project {{cookiecutter.project_identity_pkg}} added to solution...") 
+    # -*- os.system('dotnet sln {{cookiecutter.project_dir}}.sln add {{cookiecutter.project_identity_pkg}}/{{cookiecutter.project_identity_pkg}}.csproj')
+    # -*- print ("Project {{cookiecutter.project_identity_pkg}} added to solution...") 
 
     # -*- Adding {{cookiecutter.project_api_pkg_account}} Project -*-
     os.system('dotnet sln {{cookiecutter.project_dir}}.sln add {{cookiecutter.project_api_pkg_account}}/{{cookiecutter.project_api_pkg_account}}.csproj')  
@@ -69,28 +69,12 @@ try:
     # -*- print ("Applying Configuration BxApplicationDbContext migration...") 
  
     # -*- Adding Migrations to Identity Server -*- 
-    identity_dir = os.path.join(cur_dir,'{{cookiecutter.project_identity_pkg}}') 
+    identity_dir = os.path.join(cur_dir,'{{cookiecutter.project_api_pkg_account}}') 
     os.chdir(identity_dir)
- 
-    print ("Adding Identity Server migrations..") 
-         
-    os.system('dotnet ef migrations add InitialIdentityServerPermissionDbMigration -c BxIdentityPermissionDbContext -o Migrations/IdentityServer/Permission')
-    print ("Adding Identity BxIdentityPermissionDbContext migration added...") 
-
-    os.system('dotnet ef migrations add InitialIdentityServerPersistedGrantDbMigration -c BxPersistedGrantDbContext -o Migrations/IdentityServer/PersistedGrantDb')
-    print ("Adding Identity BxPersistedGrantDbContext migration added...") 
-    
-    os.system('dotnet ef migrations add InitialIdentityServerConfigurationDbMigration -c BxConfigurationDbContext -o Migrations/IdentityServer/ConfigurationDb')
-    print ("Adding Identity BxConfigurationDbContext migration added...") 
- 
-    os.system('dotnet ef migrations add InitialIdentityServerMigration -c BxApplicationDbContext -o Migrations')
-    print ("Adding Identity BxApplicationDbContext migration added...") 
-
-
- 
+  
     # -*- Building applicaton and seeding Identity Data -*- 
-    print ("Building application and seeding Indentity data...") 
-    os.system('dotnet run --environment=development --seedData=true')
+    print ("Starting Account API...") 
+    os.system('dotnet run --environment=development')
     
      
 except OSError:

@@ -1,4 +1,4 @@
-# BinaryBlox-CC-NET-Core-Web-API-Project-v2
+# BinaryBlox-CC-NET-Core-Web-API-Project-v3
 
 ![version](https://img.shields.io/badge/version-v0.4.0-green)
 
@@ -21,8 +21,8 @@ brew install brew install sourcekitten
 
 
 ```sh
-$ cookiecutter https://github.com/BinaryBlox/BinaryBlox-CC-NET-Core-Web-API-Project-v2.git
-$ cookiecutter https://github.com/BinaryBlox/BinaryBlox-CC-NET-Core-Web-API-Project-v2.git --checkout <branch_name>
-$ cookiecutter https://github.com/BinaryBlox/BinaryBlox-CC-NET-Core-Web-API-Project-v2.git --checkout alpha_version_1.0
+$ cookiecutter https://github.com/BinaryBlox/BinaryBlox-CC-NET-Core-Web-API-Project-v3.git
+$ cookiecutter https://github.com/BinaryBlox/BinaryBlox-CC-NET-Core-Web-API-Project-v3.git --checkout <branch_name>
+$ cookiecutter https://github.com/BinaryBlox/BinaryBlox-CC-NET-Core-Web-API-Project-v3.git --checkout alpha_version_1.0
 ````
 
