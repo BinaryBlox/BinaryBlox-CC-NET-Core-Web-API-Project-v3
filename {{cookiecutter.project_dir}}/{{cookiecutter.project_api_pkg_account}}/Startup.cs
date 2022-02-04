@@ -78,7 +78,7 @@ namespace {{cookiecutter.project_api_pkg_account}}
 
             // DB Creation and Seeding 
             // * Required for DI for Data Initializer
-            services.AddScoped<IEmailSender, EmailSender>();
+            // services.AddScoped<IEmailSender, EmailSender>();
             services.AddScoped<IAccountManager, AccountManager>(); 
             services.AddScoped<PermissionManagerCoreService>();
             services.AddScoped<IRolesManagementService, RolesManagementService>(); 
