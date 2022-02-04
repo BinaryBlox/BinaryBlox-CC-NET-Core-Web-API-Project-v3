@@ -73,8 +73,8 @@ try:
     os.chdir(identity_dir)
   
     # -*- Building applicaton and seeding Identity Data -*- 
-    print ("Starting Account API...") 
-    os.system('dotnet run --environment=development')
+    # -*- print ("Starting Account API...") 
+    # -*- os.system('dotnet run --environment=development')
     
      
 except OSError:
