@@ -29,7 +29,7 @@
                             "title": "{{cookiecutter.project_api_name}}",
                             "description": "{{cookiecutter.project_api_name}} Microservice.",
                             "endpoint": "http://localhost:5003/swagger/v1/swagger.json",
-                            "version": "1.0.10",
+                            "version": "1.0.12",
                             "releaseNote": "{{cookiecutter.project_api_name}} Microservice: 2020 Release notes",
                             "package": false
                         },
@@ -39,7 +39,7 @@
                             "title": "{{cookiecutter.project_api_name_account}}",
                             "description": "{{cookiecutter.project_api_pkg_account}} Microservice.",
                             "endpoint": "http://localhost:5004/swagger/v1/swagger.json",
-                            "version": "1.0.10",
+                            "version": "1.0.12",
                             "releaseNote": "{{cookiecutter.project_api_pkg_account}} Microservice: 2020 Release notes",
                             "package": false
                         }
